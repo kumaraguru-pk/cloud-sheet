@@ -1,0 +1,135 @@
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
+  integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+
+<body>
+  <div class="container">
+    <div class="row">
+      <input type="text" class="form-control m-3" id="display_top" , value="">
+    </div>
+    <div class="row">
+      <table class="table">
+        <thead>
+          <tr>
+            <th></th>
+            {% for column in columns %}
+            <th class="text-center">{{ column }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td class="text-center">{{ row }}</td>
+            {% for column in columns %}
+            <td><input type="text" class="form-control" name="cell" id="{{ column + row }}"
+                value="{{ worksheet_local[column + row].value}}" formula="{{ worksheet_local[column + row].formula}}"></td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+    integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous">
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
+    integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous">
+  </script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"
+    integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous">
+  </script>
+  <script>
+    let cells = [...document.getElementsByName("cell")];
+    cells.forEach((element) => {
+      element.addEventListener("keyup", cell_updated)
+    });
+    cells.forEach((element) => {
+      element.addEventListener("focusin", cell_selected)
+    });
+    worksheet_local = {{ worksheet_local|tojson }};
+    async function cell_updated(event) {
+      if (event.code == "Enter") {
+        await updateCell(event.target.id, event.target.value)
+      } else {
+        document.getElementById("display_top").value = event.target.value
+        
+      }
+    }
+
+    console.log(worksheet_local)
+    colored_cells = []
+
+    function getRandomIntInclusive(min, max) {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min + 1) + min); //The maximum is inclusive and the minimum is inclusive
+}
+
+
+    async function updateCell(cellId, value) {
+      let config = {
+        "method": "PUT",
+        "headers": {
+          'Content-Type': 'application/json'
+        }
+      };
+      resp = await fetch(`/sheets/{{ sheet_id}}/worksheets/{{ wsheet_id }}/cell/${cellId}/${value}`, config);
+      if (resp.status == 200) {
+        impacted_cells = JSON.parse(await resp.text())
+        const randomColor = '#'+(Math.random() * 0xFFFFFF << 0).toString(16).padStart(6, '0');
+        for (const [key, value] of Object.entries(impacted_cells)) {
+          console.log(key, value, document.getElementById(key))
+          document.getElementById(key).value = value['value']
+          document.getElementById(key).style.backgroundColor = randomColor
+          if (value['value']) {
+            worksheet_local[key].value =  value['value']
+          }
+          
+          worksheet_local[key].formula = value['formula']
+          colored_cells.push(key)
+        }
+      } else if (resp.status == 422 || resp.status == 400) {
+        document.getElementById(cellId).style.backgroundColor = 'red'
+        colored_cells.push(cellId)
+      }
+    }
+
+
+    document.getElementById("display_top").addEventListener("keyup", async function(event) {
+    if (event.keyCode === 13) {
+        val = document.getElementById("display_top").value
+        id = document.getElementById("display_top").cell
+        if (id && ( val!= '='+worksheet_local[id].formula ||  val!= worksheet_local[id].value || !(id in worksheet_local))) {
+            await updateCell(id, val)
+        }
+    }
+});
+
+    async function formula_bar_updated(event) {
+      if (event.code == "Enter") {
+        cell_id = document.getElementById("display_top").cell
+        getElementById(cell_id).value = event.target.value
+        console.log(cell_id, event.target.value)
+        await updateCell(cell_id, event.target.value)
+      }
+    }
+
+    function cell_selected(event) {
+      console.log('GURURU')
+      if (colored_cells.length > 0) {
+        colored_cells.forEach(element => {
+          console.log(element)
+          document.getElementById(element).style.backgroundColor = 'white'
+        });
+      }
+      display = event.target.value
+      formula = worksheet_local[event.target.id].formula
+      if (formula) {
+        display = '=' + formula
+      }
+      document.getElementById("display_top").value = display
+      document.getElementById("display_top").cell = event.target.id
+    }
+  </script>
+</body>
